@@ -1,6 +1,6 @@
     # 🏦 KipuBank
 
-**Autor:** Marcelo Amaya 
+**Autor:** Marcelo Amaya  
 **Licencia:** MIT  
 **Versión:** 1.0.0
 
