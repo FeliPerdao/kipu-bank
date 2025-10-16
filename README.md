@@ -1,6 +1,6 @@
     # 🏦 KipuBank
 
-**Autor:** FeliPerdao  
+**Autor:** Marcelo Amaya  
 **Licencia:** MIT  
 **Versión:** 1.0.0
 
