@@ -2,13 +2,13 @@
 pragma solidity >0.8.0;
 
 /**
- * @title Contrato KipuBank
+ * @title KipuBank Contract
  * @author FeliPerdao
- * @notice Contrato para almacenamiento de tokens y funciones de retiro/depósito como un banco. 
- *         Hay límites en los retiros por transacción. 
- *         El contrato posee un límite global de depósitos (bankCap) y contabiliza cantidades de depósitos y retiros.
- * @dev Este contrato es solo para propósitos de aprendizaje
- * @custom:security No uses este código en producción
+ * @notice Contract for token storage and deposit/withdraw functions similar to a bank. 
+ *         There are limits on withdrawals per transaction. 
+ *         The contract has a global deposit limit (bankCap) and tracks the number of deposits and withdrawals.
+ * @dev This contract is for learning purposes only.
+ * @custom:security Do not use this code in production.
  */
 
 contract KipuBank {
@@ -17,20 +17,20 @@ contract KipuBank {
     ================ IMMUTABLES =================
     ///////////////////////////////////////////*/
 
-    uint256 immutable public i_withdrawLimit; // límite por retiro
-    uint256 immutable public i_bankCap; // límite del global del banco
+    uint256 immutable public i_withdrawLimit; // withdrawal limit
+    uint256 immutable public i_bankCap; // global bank limit
 
     /*///////////////////////////////////////////
     ============= STATE VARIABLES ===============
     ///////////////////////////////////////////*/
 
-    ///@notice mapping que representa las cuentas personales de cada usuario
+    ///@notice mapping representing personal accounts for each user
     mapping(address user => uint256 balance) public s_vaults;
 
-    ///@notice saldo total almacenado en el banco (todas las cuentas de todos los usuarios)
+    ///@notice total balance stored in the bank (all users combined)
     uint256 public s_totalBalance;
 
-    ///@notice contadores globales de depósitos y retiros exitosos
+    ///@notice global counters for successful deposits and withdrawals
     uint256 public s_depositCount;
     uint256 public s_withdrawalCount;
 
@@ -38,7 +38,7 @@ contract KipuBank {
     ================= EVENTS ====================
     ///////////////////////////////////////////*/
 
-    ///@notice eventos emitidos a cada depósito o retiro exitoso
+    ///@notice events emitted for every successful deposit or withdrawal
     event DepositPerformed(address indexed user, uint256 amount, uint256 newVaultBalance);
     event WithdrawalPerformed(address indexed user, uint256 amount, uint256 newVaultBalance);
 
@@ -46,19 +46,19 @@ contract KipuBank {
     ================= ERRORS ====================
     ///////////////////////////////////////////*/
 
-    ///@notice revert cuando el intento de depósito excede bankCap
+    ///@notice revert when a deposit attempt exceeds bankCap
     error BankCapExceeded(uint256 attemptedTotal, uint256 bankCap);
 
-    ///@notice revert cuando el retiro solicitado excede el límite por retiro
+    ///@notice revert when the requested withdrawal exceeds the per-transaction limit
     error WithdrawalLimitExceeded(uint256 attemptedWithdraw, uint256 limit);
 
-    ///@notice revert cuando el retiro solicitado excede el saldo en cuenta
+    ///@notice revert when the requested withdrawal exceeds the account balance
     error InsufficientFunds(address user, uint256 attemptedWithdraw, uint256 balance);
 
-    ///@notice error por transferencia falla de ETH
+    ///@notice error when ETH transfer fails
     error TransactionFailed(bytes reason);
 
-    ///@notice revert por detección de ataque reentrancy
+    ///@notice revert when a reentrancy attack is detected
     error ReentrancyDetected();
 
     /*///////////////////////////////////////////
@@ -81,9 +81,9 @@ contract KipuBank {
     ///////////////////////////////////////////*/
 
     /**
-     * @notice Constructor del contrato
-     * @param _withdrawLimit límite máximo de retiro por transacción (wei)
-     * @param _bankCap límite global de depósitos (wei)
+     * @notice Contract constructor
+     * @param _withdrawLimit maximum withdrawal per transaction (wei)
+     * @param _bankCap global deposit limit (wei)
      */
     constructor(uint256 _withdrawLimit, uint256 _bankCap) {
         i_withdrawLimit = _withdrawLimit;
@@ -95,7 +95,7 @@ contract KipuBank {
     ============= FALLBACK / RECEIVE ============
     ///////////////////////////////////////////*/
 
-///@notice permite recibir ETH directamente y trata el envío como un depósito
+///@notice allows receiving ETH directly and treats it as a deposit
     receive() external payable{
         deposit();
     }
@@ -109,45 +109,53 @@ contract KipuBank {
     ///////////////////////////////////////////*/
 
     /**
-     * @notice Deposita ETH en la cuenta de "msg.sender"
-     * @dev algorithmo checks-effects-interactions; revierte si saldo del banco supera límite
+     * @notice Deposit ETH into the "msg.sender" account
+     * @dev follows the checks-effects-interactions pattern; reverts if the total bank balance exceeds the limit
      */
     function deposit() public payable {
-        // -- chequeos --
+        // -- checks --
         uint256 newTotalBalance = s_totalBalance + msg.value;
         if (newTotalBalance > i_bankCap) revert BankCapExceeded(newTotalBalance, i_bankCap);
 
-        // -- efectos --
-        s_vaults[msg.sender] += msg.value;
+        // -- effects --
+        uint256 newVaultBalance = s_vaults[msg.sender] + msg.value;
+        s_vaults[msg.sender] = newVaultBalance;
         s_totalBalance = newTotalBalance;
-        s_depositCount += 1;
+        unchecked { s_depositCount++; } // <- ver punto 2
 
-        // -- interacciones --
-        emit DepositPerformed(msg.sender, msg.value, s_vaults[msg.sender]);
+        // -- interactions --
+        emit DepositPerformed(msg.sender, msg.value, newVaultBalance);
     }
 
+    /**
+        * @notice ETH withdrawal
+        * @param _amount value to withdraw (wei)
+    */
     function withdraw(uint256 _amount) external nonReentrant {
-        // -- chequeos --
+        // -- checks --
         if (_amount > i_withdrawLimit) revert WithdrawalLimitExceeded(_amount, i_withdrawLimit);
         
         uint256 vaultBalance = s_vaults[msg.sender];
         if (_amount > vaultBalance) revert InsufficientFunds(msg.sender, _amount, vaultBalance);
 
-        // -- efectos --
-        s_vaults[msg.sender] = vaultBalance - _amount;
-        s_totalBalance -= _amount;
-        s_withdrawalCount += 1;
+        // -- effects --
+        uint256 newVaultBalance;
+        unchecked { newVaultBalance = vaultBalance - _amount; } // ver punto 2
 
-        // -- interacciones --
-        emit WithdrawalPerformed(msg.sender, _amount, s_vaults[msg.sender]);
+        s_vaults[msg.sender] = newVaultBalance;
+        s_totalBalance -= _amount;
+        unchecked { s_withdrawalCount++; }
+
+        // -- interactions --
+        emit WithdrawalPerformed(msg.sender, _amount, newVaultBalance);
         _transferEth(msg.sender, _amount);
     }
 
     /**
-     * @notice Transferencia de ETH usando call
-     * @param _to Destiono del retiro
-     * @param _amount Cantidad a transferir en wei
-     * @dev Revertir si falla la transferencia
+     * @notice ETH transfer using call
+     * @param _to withdrawal destination
+     * @param _amount amount to transfer in wei
+     * @dev revert if transfer fails
      */
     function _transferEth(address _to, uint256 _amount) private {
         (bool success, bytes memory err) = _to.call{value: _amount}("");
@@ -155,9 +163,9 @@ contract KipuBank {
     }
 
     /**
-     * @notice Consulta el saldo en cuenta de un usuario
-     * @param _user Dirección a consular
-     * @return balance Saldo en wei de la cuenta _user
+     * @notice Query a user's account balance
+     * @param _user address to query
+     * @return balance account balance in wei for _user
      */
     function getVaultBalance(address _user) external view returns (uint256 balance) {
         return s_vaults[_user];
