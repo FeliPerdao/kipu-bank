@@ -84,7 +84,7 @@ Para desplegar el contrato KipuBank en Remix utilizando Sepolia Testnet:
 
 Una versión de prueba del contrato está desplegada en la red **Sepolia Testnet**:
 
-👉 [Ver en Etherscan](https://sepolia.etherscan.io/address/0x29bb6bf59453e2d121559c53a428f97c91d7ab81)
+👉 [Ver en Etherscan](https://sepolia.etherscan.io/address/0xbc54d5132c75af0ed8744e377618a7ddf2f4f25f)
 
 ### Parámetros de despliegue:
 
